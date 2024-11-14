@@ -85,12 +85,18 @@ private:
 	int epoll_fd;			// File descriptor for epoll
 };
 
-namespace mqbroker {
-	constexpr std::string_view Exchange = "exchange";
-	constexpr std::string_view DataSimulatorQueue = "temperature_values";
-	constexpr std::string_view RuleEngineQueue = "temperature_rules";
-	constexpr std::string_view DSQueueRoutingKey = "values";
-	constexpr std::string_view REQueueRoutingKey = "rules";
+namespace iot_service {
+	
+	namespace mqbroker {
+		constexpr std::string_view Exchange = "exchange";
+		constexpr std::string_view DataSimulatorQueue = "temperature_values";
+		constexpr std::string_view RuleEngineQueue = "temperature_rules";
+		constexpr std::string_view DSQueueRoutingKey = "values";
+		constexpr std::string_view REQueueRoutingKey = "rules";
+	}
+	constexpr std::string_view DataBaseName = "iot_db";
 }
+
+
 
 #endif 	// MY_TCP_HANDLER_H

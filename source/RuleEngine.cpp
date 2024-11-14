@@ -5,6 +5,7 @@
 #include <string>
 #include <cmath>
 
+using namespace iot_service;
 
 int main() {
     // Initialize everything required

@@ -5,6 +5,7 @@
 #include <random>
 #include <string>
 
+using namespace iot_service;
 
 int main(int argc, char* argv[]) {
     // Initialize the handler
@@ -18,7 +19,7 @@ int main(int argc, char* argv[]) {
 	
 	// bind the queue to the exchange
 	channel.bindQueue(mqbroker::Exchange, mqbroker::DataSimulatorQueue, mqbroker::DSQueueRoutingKey);
-
+	
 	std::random_device dev;
 	std::mt19937 gen(dev());
 	constexpr int MIN_TEMP = 20, MAX_TEMP = 26;
