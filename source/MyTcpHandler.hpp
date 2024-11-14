@@ -5,6 +5,7 @@
 #include "amqpcpp/linux_tcp.h"
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <string_view>
 
 // Define a custom handler to manage connection and errors
 class MyTcpHandler : public AMQP::TcpHandler {
@@ -68,24 +69,28 @@ public:
         const int MAX_EVENTS = 10;
         struct epoll_event events[MAX_EVENTS];
 
-        while (true) {
-            int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
-            for (int i = 0; i < num_events; ++i) {
-                int fd = events[i].data.fd;
-                if (events[i].events & EPOLLIN) {
-                    connection->process(fd, AMQP::readable);
-                }
-                if (events[i].events & EPOLLOUT) {
-                    connection->process(fd, AMQP::writable);
-                }
-            }
-        }
+		int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, 0);
+		for (int i = 0; i < num_events; ++i) {
+			int fd = events[i].data.fd;
+			if (events[i].events & EPOLLIN) {
+				connection->process(fd, AMQP::readable);
+			}
+			if (events[i].events & EPOLLOUT) {
+				connection->process(fd, AMQP::writable);
+			}
+		}
     }
 
 private:
 	int epoll_fd;			// File descriptor for epoll
 };
 
-
+namespace mqbroker {
+	constexpr std::string_view Exchange = "exchange";
+	constexpr std::string_view DataSimulatorQueue = "temperature_values";
+	constexpr std::string_view RuleEngineQueue = "temperature_rules";
+	constexpr std::string_view DSQueueRoutingKey = "values";
+	constexpr std::string_view REQueueRoutingKey = "rules";
+}
 
 #endif 	// MY_TCP_HANDLER_H

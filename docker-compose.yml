@@ -33,3 +33,14 @@ services:
         environment:
             - RABBITMQ_HOST=rabbitmq
         command: ["./IoTController"]
+        
+    ruleengine:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+        environment:
+            - RABBITMQ_HOST=rabbitmq
+        command: ["./RuleEngine"]

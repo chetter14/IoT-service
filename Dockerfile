@@ -24,7 +24,9 @@ COPY source/ /app
 
 # Compile DataSimulator and IoTController
 RUN g++ -std=c++20 -I/usr/local/include -lamqpcpp -lpthread -ldl DataSimulator.cpp -o DataSimulator && \
-    g++ -std=c++20 -I/usr/local/include -lamqpcpp -lpthread -ldl IoTController.cpp -o IoTController
+    g++ -std=c++20 -I/usr/local/include -lamqpcpp -lpthread -ldl IoTController.cpp -o IoTController && \
+    g++ -std=c++20 -I/usr/local/include -lamqpcpp -lpthread -ldl RuleEngine.cpp -o RuleEngine
 	
+# More like a stub
 CMD ["./DataSimulator"]
 
