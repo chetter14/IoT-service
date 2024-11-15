@@ -15,7 +15,7 @@ services:
     mongodb:
         image: mongo:latest
         ports:
-            - "27017:27107"   # MongoDB port
+            - "27017:27017"   # MongoDB port
         environment:
             MONGO_INITDB_ROOT_USERNAME: root
             MONGO_INITDB_ROOT_PASSWORD: example

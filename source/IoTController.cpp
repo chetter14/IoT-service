@@ -24,6 +24,7 @@ int main() {
 	
 	auto db = client[DataBaseName];
 	auto collection = db[mqbroker::DataSimulatorQueue];
+	collection.delete_many({});
 
     // Declare the queue with DataSimulator to consume messages from it
     channel.declareQueue(mqbroker::DataSimulatorQueue);	
@@ -36,8 +37,11 @@ int main() {
 		
 		auto now = std::chrono::system_clock::now();
 		std::time_t time_now = std::chrono::system_clock::to_time_t(now);
+		auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+		
 		std::stringstream ss;
-		ss << std::put_time(std::localtime(&time_now), "%Y-%m-%d %H:%M:%S");
+		ss << std::put_time(std::localtime(&time_now), "%Y-%m-%d %H:%M:%S:") 
+			<< "." << std::setfill('0') << std::setw(3) << milliseconds.count();
 		
 		collection.insert_one(bsoncxx::builder::basic::make_document(
 			bsoncxx::builder::basic::kvp(ss.str(), temperature)
