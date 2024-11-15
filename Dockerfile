@@ -35,11 +35,10 @@ WORKDIR /app
 COPY source/ /app
 
 # Compile DataSimulator and IoTController
-RUN g++ -std=c++20 -I/usr/local/include -lamqpcpp -lpthread -ldl  DataSimulator.cpp -o DataSimulator && \
+RUN g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \
+		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx DataSimulator.cpp -o DataSimulator && \
     g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \ 
-	-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx IoTController.cpp -o IoTController && \
-    g++ -std=c++20 -I/usr/local/include -lamqpcpp -lpthread -ldl RuleEngine.cpp -o RuleEngine
-	
-# More like a stub
-CMD ["./DataSimulator"]
+		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx IoTController.cpp -o IoTController && \
+    g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \
+		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx RuleEngine.cpp -o RuleEngine
 

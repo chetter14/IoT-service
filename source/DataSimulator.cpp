@@ -7,22 +7,32 @@
 
 using namespace iot_service;
 
+// Locally defined functions and variables
+namespace {
+	constexpr int MIN_TEMP = 20, MAX_TEMP = 26;
+	
+	void InitMessagingWithController(AMQP::TcpChannel& channel) {
+		// Declare a queue and exchange
+		channel.declareQueue(mqbroker::DataSimulatorQueue);
+		channel.declareExchange(mqbroker::Exchange, AMQP::direct);
+		
+		// Bind the DataSimulator queue to the exchange with the routing key
+		channel.bindQueue(mqbroker::Exchange, mqbroker::DataSimulatorQueue, mqbroker::DSQueueRoutingKey);
+	}
+}
+
 int main(int argc, char* argv[]) {
-    // Initialize the handler
+    // Initialize the handler, connection, and channel
     MyTcpHandler handler;
     AMQP::TcpConnection connection(&handler, AMQP::Address("amqp://guest:guest@rabbitmq/"));
     AMQP::TcpChannel channel(&connection);
-
-    // Declare a queue and exchange
-    channel.declareQueue(mqbroker::DataSimulatorQueue);
-	channel.declareExchange(mqbroker::Exchange, AMQP::direct);
 	
-	// bind the queue to the exchange
-	channel.bindQueue(mqbroker::Exchange, mqbroker::DataSimulatorQueue, mqbroker::DSQueueRoutingKey);
+	// Initialize components for messaging with IoT controller
+    InitMessagingWithController(channel);
 	
+	// Initialization of generator of random temperature values
 	std::random_device dev;
 	std::mt19937 gen(dev());
-	constexpr int MIN_TEMP = 20, MAX_TEMP = 26;
 	std::uniform_int_distribution<std::mt19937::result_type> temp_gen(MIN_TEMP, MAX_TEMP);
 
 	while (true) {
@@ -31,12 +41,11 @@ int main(int argc, char* argv[]) {
 		
 		handler.processEvents(&connection);
 				
-		// Rest for a little 
+		// To send 10 messages per second
 		using namespace std::chrono_literals;
 		std::this_thread::sleep_for(100ms);
 	}
 
 	std::cout << "The DataSimulator is to be closed!" << std::endl;
-
     return 0;
 }
