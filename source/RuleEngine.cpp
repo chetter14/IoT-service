@@ -74,13 +74,15 @@ int main() {
 		// Get rule message according to temperature values
 		std::string rule_message = GetRuleMessage(prev_last_temp, last_temp, cur_temp);
 		
-		// Get the current time (from date to milliseconds)
-		std::string current_time = GetCurrentTime();
-		
 		// Insert the current time point and rule message into collection (if any rule is met)
 		if (rule_message.size() != 0) {
+			// Get the current time
+			auto now = std::chrono::system_clock::now();
+			auto bson_date = bsoncxx::types::b_date{ now };		// Convert to BSON format
+			
 			temp_rules_collection.insert_one(bsoncxx::builder::basic::make_document(
-				bsoncxx::builder::basic::kvp(current_time, rule_message)
+				bsoncxx::builder::basic::kvp("Rule message", rule_message),
+				bsoncxx::builder::basic::kvp("Time", bson_date)
 			));
 		}
 		// Update the last and previous of the last values
@@ -91,7 +93,7 @@ int main() {
 	while (true) {
 		handler.processEvents(&connection);
 	}
-	
+
 	std::cout << "RuleEngine is to be closed!" << std::endl;
     return 0;
 }

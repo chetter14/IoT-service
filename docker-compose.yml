@@ -50,3 +50,26 @@ services:
         environment:
             - RABBITMQ_HOST=rabbitmq
         command: ["./RuleEngine"]
+        
+    prometheus:
+        image: prom/prometheus:latest
+        volumes:
+          - ./prometheus.yml:/etc/prometheus/prometheus.yml
+        ports:
+          - "9090:9090" # Prometheus UI
+        depends_on:
+          - iotcontroller
+          
+    grafana:
+        image: grafana/grafana:latest
+        ports:
+          - "3000:3000" # Grafana UI
+        depends_on:
+          - prometheus
+        environment:
+          - GF_SECURITY_ADMIN_USER=admin
+          - GF_SECURITY_ADMIN_PASSWORD=admin
+        
+networks:
+    default:
+        name: monitoring_network

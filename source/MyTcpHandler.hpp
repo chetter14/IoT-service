@@ -100,23 +100,6 @@ namespace iot_service {
 		constexpr std::string_view REQueueRoutingKey = "rules";
 	}
 	constexpr std::string_view DatabaseName = "iot_db";
-	
-	std::string GetCurrentTime() {
-		// Get the current std::chrono::time_point
-		auto now = std::chrono::system_clock::now();
-		// Convert to std::time_t for date and time formatting
-		std::time_t time_now = std::chrono::system_clock::to_time_t(now);
-		// Extract milliseconds from current std::chrono::time_point
-		auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-		
-		// Convert std::time_t object to the desired format and append milliseconds
-		std::stringstream current_time;
-		current_time << std::put_time(std::localtime(&time_now), "%Y-%m-%d %H:%M:%S") 
-			<< "." << std::setfill('0') << std::setw(3) << milliseconds.count();
-		
-		// Return current_time as string
-		return current_time.str();
-	}
 }
 
 

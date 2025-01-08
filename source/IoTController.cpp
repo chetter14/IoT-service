@@ -6,6 +6,9 @@
 #include <bsoncxx/json.hpp>
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
+#include <prometheus/exposer.h>
+#include <prometheus/registry.h>
+#include <prometheus/counter.h>
 #include <sstream>
 #include <iomanip>
 #include <ctime>
@@ -48,6 +51,22 @@ int main() {
 
 	// Initialize components for messaging with Rule Engine
 	InitMessagingWithRuleEngine(channel);
+	
+	// Initialize Prometheus:
+	
+	using namespace prometheus;
+	// Create an http server running on port 8080
+	Exposer exposer{"0.0.0.0:8080"};
+	// Create a registry for collecting metrics
+    auto registry = std::make_shared<Registry>();
+	// Create a counter and register it
+    auto& counter_family = BuildCounter()
+                               .Name("example_counter")
+                               .Help("An example counter")
+                               .Register(*registry);
+    auto& counter = counter_family.Add({{"label", "value"}});
+	// Register the registry to the exposer
+    exposer.RegisterCollectable(registry);
 
     // Declare the queue with DataSimulator to consume messages from it
     channel.declareQueue(mqbroker::DataSimulatorQueue);	
@@ -58,12 +77,17 @@ int main() {
 		std::string received_message(message.body(), message.bodySize());
 		int temperature = std::stoi(received_message);
 		
-		// Get the current time (from date to milliseconds)
-		std::string current_time = GetCurrentTime();
+		// Update Prometheus counter value
+		counter.Increment();
+		
+		// Get the current time
+		auto now = std::chrono::system_clock::now();
+		auto bson_date = bsoncxx::types::b_date{ now };		// Convert to BSON format
 		
 		// Insert the current time point (date and stuff) and temperature value into collection
 		temp_values_collection.insert_one(bsoncxx::builder::basic::make_document(
-			bsoncxx::builder::basic::kvp(current_time, temperature)
+			bsoncxx::builder::basic::kvp("Temperature", temperature),
+			bsoncxx::builder::basic::kvp("Time", bson_date)
 		));
 		
 		channel.publish(mqbroker::Exchange, mqbroker::REQueueRoutingKey, received_message);

@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y \
 	cmake \
 	libssl-dev \
 	libsasl2-dev \
+	libmicrohttpd-dev \
+    libcurl4-openssl-dev \
 	git \
 	&& rm -rf /var/lib/apt/lists/*
 	
@@ -26,6 +28,13 @@ RUN	cd mongo-cxx-driver-r3.10.1/build && \
 	cmake --build . && \
 	cmake --build . --target install
 	
+# Clone and build Prometheus C++ client library
+RUN git clone --recurse-submodules https://github.com/jupp0r/prometheus-cpp.git /prometheus-cpp && \
+    cd /prometheus-cpp && \
+    mkdir _build && cd _build && \
+    cmake .. -DBUILD_SHARED_LIBS=ON && \
+    make && make install
+
 RUN ldconfig
 
 # Set the working directory
@@ -37,8 +46,8 @@ COPY source/ /app
 # Compile DataSimulator and IoTController
 RUN g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \
 		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx DataSimulator.cpp -o DataSimulator && \
-    g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \ 
-		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx IoTController.cpp -o IoTController && \
+    g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi -I/usr/local/include/prometheus-cpp \ 
+		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core \
+		IoTController.cpp -o IoTController && \
     g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \
 		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx RuleEngine.cpp -o RuleEngine
-
