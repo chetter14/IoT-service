@@ -23,6 +23,10 @@ public:
     void onError(AMQP::TcpConnection *connection, const char *message) override {
         std::cerr << "Connection error: " << message << std::endl;
     }
+	
+	// void onHeartbeat(AMQP::TcpConnection* connection) override {
+        // std::cout << "Heartbeat sent or received" << std::endl;
+    // }
 
     void onClosed(AMQP::TcpConnection *connection) override {
         std::cout << "Connection closed!" << std::endl;

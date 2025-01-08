@@ -4,6 +4,8 @@ services:
         ports:
             - "5672:5672"   # AMQP port
             - "15672:15672" # RabbitMQ UI port
+        volumes:
+            - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
         healthcheck:
             test: ["CMD", "rabbitmqctl", "status"]
             interval: 10s
