@@ -7,6 +7,9 @@
 #include <bsoncxx/json.hpp>
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
+#include "Prometheus.hpp"
+#include <prometheus/registry.h>
+#include <prometheus/counter.h>
 #include <sstream>
 #include <iomanip>
 #include <ctime>
@@ -62,6 +65,19 @@ int main() {
 	// Get collection of temperature rules
 	auto temp_rules_collection = GetTempRulesCollection(client);
 
+	// Initialize Prometheus:
+	
+	using namespace prometheus;
+	MetricsManager manager("0.0.0.0:8081");
+	// Get a registry for collecting metrics
+    auto registry = manager.GetRegistry();
+	// Create a counter and register it
+    auto& counter_family = BuildCounter()
+                           .Name("rule_engine_counter")
+                           .Help("Rule engine counter")
+                           .Register(*registry);
+	auto& message_counter = counter_family.Add({{"message_counter", "value"}});
+
     // Declare the queue and consume messages from it
     channel.declareQueue(mqbroker::RuleEngineQueue);
     channel.consume(mqbroker::RuleEngineQueue).onReceived([&](const AMQP::Message &message,
@@ -70,6 +86,9 @@ int main() {
 		// Extract message body (temperature value)
 		std::string received_message(message.body(), message.bodySize());
 		int cur_temp = std::stoi(received_message);
+		
+		// Update messages counter value
+		message_counter.Increment();
 		
 		// Get rule message according to temperature values
 		std::string rule_message = GetRuleMessage(prev_last_temp, last_temp, cur_temp);

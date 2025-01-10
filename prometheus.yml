@@ -5,3 +5,7 @@ scrape_configs:
   - job_name: "iotcontroller"
     static_configs:
       - targets: ["iotcontroller:8080"]
+      
+  - job_name: "ruleengine"
+    static_configs:
+      - targets: ["ruleengine:8081"]
