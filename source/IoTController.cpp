@@ -9,9 +9,13 @@
 #include "Prometheus.hpp"
 #include <prometheus/registry.h>
 #include <prometheus/counter.h>
+// #include "Logger.hpp"
 #include <sstream>
 #include <iomanip>
 #include <ctime>
+
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/tcp_sink.h> // TCP sink for Logstash
 
 using namespace iot_service;
 
@@ -35,6 +39,108 @@ namespace {
 		channel.bindQueue(mqbroker::Exchange, mqbroker::RuleEngineQueue, mqbroker::REQueueRoutingKey);
 	}
 }
+
+
+int main() {
+	// Initialize Logger
+	// Logger::Initialize("logstash", 5000);
+	
+	// std::cout << "Sleeping..." << std::endl;
+	
+	// using namespace std::chrono_literals;
+	// std::this_thread::sleep_for(25s);
+	
+	std::cout << "Launched main()" << std::endl;
+	
+	// Configure the TCP sink for Logstash
+    spdlog::sinks::tcp_sink_config cfg("logstash", 5044);
+	// cfg.username = "logstash_user";
+    // cfg.password = "root";
+	
+	std::cout << "Created config" << std::endl;
+	
+	auto tcp_sink = std::make_shared<spdlog::sinks::tcp_sink_mt>(cfg);
+	
+	std::cout << "Created tcp sink" << std::endl;
+	
+	auto logger = std::make_shared<spdlog::logger>("tcp_logger", tcp_sink);
+	
+	std::cout << "Created logger" << std::endl;
+	
+	spdlog::register_logger(logger);
+	
+	std::cout << "Registered logger" << std::endl;
+
+	logger->info(R"({"service":"IoT Controller", "level":"info", "message":"Service started"})");
+	
+	std::cout << "Logged info" << std::endl;
+	
+    // Initialize the handler, connection, and channel
+    MyTcpHandler handler;
+    AMQP::TcpConnection connection(&handler, AMQP::Address("amqp://guest:guest@rabbitmq/"));
+    AMQP::TcpChannel channel(&connection);
+		
+	// Initialize MongoDB driver instance
+	mongocxx::instance instance{};
+	// Get client connected to MongoDB
+	mongocxx::client client{mongocxx::uri{"mongodb://root:example@mongodb:27017"}};
+	// Get collection of temperature values
+	auto temp_values_collection = GetTempValuesCollection(client);
+
+	// Initialize components for messaging with Rule Engine
+	InitMessagingWithRuleEngine(channel);
+	
+	// Initialize Prometheus:
+	
+	using namespace prometheus;
+	MetricsManager manager("0.0.0.0:8080");
+	// Get a registry for collecting metrics
+    auto registry = manager.GetRegistry();
+	// Create a counter and register it
+    auto& counter_family = BuildCounter()
+                           .Name("iot_controller_counter")
+                           .Help("IoT controller counter")
+                           .Register(*registry);
+	auto& message_counter = counter_family.Add({{"message_counter", "value"}});
+
+    // Declare the queue with DataSimulator to consume messages from it
+    channel.declareQueue(mqbroker::DataSimulatorQueue);	
+	channel.consume(mqbroker::DataSimulatorQueue).onReceived([&](const AMQP::Message &message,
+                                              uint64_t deliveryTag,
+                                              bool redelivered) {
+		// Extract the message body (temperature value)
+		std::string received_message(message.body(), message.bodySize());
+		int temperature = std::stoi(received_message);
+		
+		// Update message_counter value
+		message_counter.Increment();
+		
+		// Log temperature
+		// Logger::Info(R"({"service":"IoTController", "level":"info", "message":"Received a temperature"})");
+		
+
+		
+		// Get the current time
+		auto now = std::chrono::system_clock::now();
+		auto bson_date = bsoncxx::types::b_date{ now };		// Convert to BSON format
+		
+		// Insert the current time point (date and stuff) and temperature value into collection
+		temp_values_collection.insert_one(bsoncxx::builder::basic::make_document(
+			bsoncxx::builder::basic::kvp("Temperature", temperature),
+			bsoncxx::builder::basic::kvp("Time", bson_date)
+		));
+		
+		channel.publish(mqbroker::Exchange, mqbroker::REQueueRoutingKey, received_message);
+	});
+	
+	while (true) {
+		handler.processEvents(&connection);
+	}
+	
+	std::cout << "IoT controller is to be closed!" << std::endl;
+    return 0;
+}
+
 
 /*
 Yes, it is possible to fetch performance data from Prometheus in your C++ code. Prometheus provides an **HTTP API** that allows you to query its data programmatically. You can use this API to fetch metrics and use them for decision-making, such as dynamically creating new threads based on incoming request rates.
@@ -200,65 +306,3 @@ Let me know if you have further questions or need help with implementation detai
 
 
 */ 
-
-int main() {
-    // Initialize the handler, connection, and channel
-    MyTcpHandler handler;
-    AMQP::TcpConnection connection(&handler, AMQP::Address("amqp://guest:guest@rabbitmq/"));
-    AMQP::TcpChannel channel(&connection);
-		
-	// Initialize MongoDB driver instance
-	mongocxx::instance instance{};
-	// Get client connected to MongoDB
-	mongocxx::client client{mongocxx::uri{"mongodb://root:example@mongodb:27017"}};
-	// Get collection of temperature values
-	auto temp_values_collection = GetTempValuesCollection(client);
-
-	// Initialize components for messaging with Rule Engine
-	InitMessagingWithRuleEngine(channel);
-	
-	// Initialize Prometheus:
-	
-	using namespace prometheus;
-	MetricsManager manager("0.0.0.0:8080");
-	// Get a registry for collecting metrics
-    auto registry = manager.GetRegistry();
-	// Create a counter and register it
-    auto& counter_family = BuildCounter()
-                           .Name("iot_controller_counter")
-                           .Help("IoT controller counter")
-                           .Register(*registry);
-	auto& message_counter = counter_family.Add({{"message_counter", "value"}});
-
-    // Declare the queue with DataSimulator to consume messages from it
-    channel.declareQueue(mqbroker::DataSimulatorQueue);	
-	channel.consume(mqbroker::DataSimulatorQueue).onReceived([&](const AMQP::Message &message,
-                                              uint64_t deliveryTag,
-                                              bool redelivered) {
-		// Extract the message body (temperature value)
-		std::string received_message(message.body(), message.bodySize());
-		int temperature = std::stoi(received_message);
-		
-		// Update message_counter value
-		message_counter.Increment();
-		
-		// Get the current time
-		auto now = std::chrono::system_clock::now();
-		auto bson_date = bsoncxx::types::b_date{ now };		// Convert to BSON format
-		
-		// Insert the current time point (date and stuff) and temperature value into collection
-		temp_values_collection.insert_one(bsoncxx::builder::basic::make_document(
-			bsoncxx::builder::basic::kvp("Temperature", temperature),
-			bsoncxx::builder::basic::kvp("Time", bson_date)
-		));
-		
-		channel.publish(mqbroker::Exchange, mqbroker::REQueueRoutingKey, received_message);
-	});
-	
-	while (true) {
-		handler.processEvents(&connection);
-	}
-	
-	std::cout << "IoT controller is to be closed!" << std::endl;
-    return 0;
-}

@@ -1,6 +1,7 @@
 #include <prometheus/exposer.h>
 #include <prometheus/registry.h>
 #include <memory>
+#include <string>
 
 using namespace prometheus;
 

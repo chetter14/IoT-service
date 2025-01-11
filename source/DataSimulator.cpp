@@ -23,6 +23,8 @@ namespace {
 
 int main(int argc, char* argv[]) {
     // Initialize the handler, connection, and channel
+	std::cout << "Launched main()\n";
+	
     MyTcpHandler handler;
     AMQP::TcpConnection connection(&handler, AMQP::Address("amqp://guest:guest@rabbitmq/"));
     AMQP::TcpChannel channel(&connection);

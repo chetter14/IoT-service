@@ -20,6 +20,35 @@ services:
             MONGO_INITDB_ROOT_USERNAME: root
             MONGO_INITDB_ROOT_PASSWORD: example
     
+    elasticsearch:
+        image: elasticsearch:7.17.26
+        environment:
+            - discovery.type=single-node
+        ports:
+            - "9200:9200"
+            
+    logstash:
+        image: logstash:7.17.26
+        volumes:
+            - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+        ports:
+            - "5044:5044"  # For Logstash input
+        depends_on:
+            - elasticsearch
+        healthcheck:
+            test: ["CMD-SHELL", "curl -f http://localhost:9600/_node/stats || exit 1"]
+            interval: 30s       # Time between health check attempts
+            timeout: 10s        # Time to wait for a response
+            retries: 5          # Number of retries before marking as unhealthy
+            start_period: 20s   # Grace period before starting health checks
+    
+    kibana:
+        image: kibana:7.17.26
+        ports:
+            - "5601:5601"
+        depends_on:
+            - elasticsearch
+    
     datasimulator:
         build:
             context: .
@@ -38,6 +67,8 @@ services:
         depends_on:
             rabbitmq:
                 condition: service_healthy
+            logstash:
+                condition: service_healthy
         environment:
             - RABBITMQ_HOST=rabbitmq
         command: ["./IoTController"]
@@ -48,6 +79,8 @@ services:
             dockerfile: Dockerfile
         depends_on:
             rabbitmq:
+                condition: service_healthy
+            logstash:
                 condition: service_healthy
         environment:
             - RABBITMQ_HOST=rabbitmq

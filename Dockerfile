@@ -25,8 +25,14 @@ RUN curl -OL https://github.com/mongodb/mongo-cxx-driver/releases/download/r3.10
 # Build the MongoDB C++ driver and install it
 RUN	cd mongo-cxx-driver-r3.10.1/build && \
 	cmake .. -DCMAKE_BUILD_TYPE=Release -DMONGOCXX_OVERRIDE_DEFAULT_INSTALL_PREFIX=OFF -DCMAKE_CXX_STANDARD=20 && \
-	cmake --build . && \
-	cmake --build . --target install
+	make && make install
+	
+# Install spdlog library
+RUN git clone https://github.com/gabime/spdlog.git /spdlog && \
+    cd /spdlog && \
+    mkdir build && cd build && \
+    cmake .. && \
+    make install
 	
 # Clone and build Prometheus C++ client library
 RUN git clone --recurse-submodules https://github.com/jupp0r/prometheus-cpp.git /prometheus-cpp && \
@@ -43,12 +49,12 @@ WORKDIR /app
 # Copy sources into /app directory
 COPY source/ /app
 
-# Compile DataSimulator and IoTController
+# Compile DataSimulator, IoTController, and RuleEngine
 RUN g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \
 		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx DataSimulator.cpp -o DataSimulator && \
     g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi -I/usr/local/include/prometheus-cpp \ 
-		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core \
+		-lspdlog -lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core \
 		IoTController.cpp -o IoTController && \
     g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi -I/usr/local/include/prometheus-cpp \
-		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core \
+		-lspdlog -lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core \
 		RuleEngine.cpp -o RuleEngine

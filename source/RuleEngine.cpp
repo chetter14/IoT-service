@@ -14,6 +14,9 @@
 #include <iomanip>
 #include <ctime>
 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/tcp_sink.h> // TCP sink for Logstash
+
 using namespace iot_service;
 
 // Locally defined functions and variables
@@ -49,7 +52,41 @@ namespace {
 }
 
 int main() {
-    // Initialize handler, connection, and channel
+		// Initialize Logger
+	// Logger::Initialize("logstash", 5000);
+	
+	// std::cout << "Sleeping..." << std::endl;
+	
+	// using namespace std::chrono_literals;
+	// std::this_thread::sleep_for(50s);
+	
+	std::cout << "Launched main()" << std::endl;
+	
+	// Configure the TCP sink for Logstash
+    spdlog::sinks::tcp_sink_config cfg("logstash", 5044);
+	// cfg.username = "logstash_user";
+    // cfg.password = "root";
+	
+	std::cout << "Created config" << std::endl;
+	
+	auto tcp_sink = std::make_shared<spdlog::sinks::tcp_sink_mt>(cfg);
+	
+	std::cout << "Created tcp sink" << std::endl;
+	
+	auto logger = std::make_shared<spdlog::logger>("tcp_logger", tcp_sink);
+	
+	std::cout << "Created logger" << std::endl;
+	
+	spdlog::register_logger(logger);
+	
+	std::cout << "Registered logger" << std::endl;
+
+	logger->info(R"({"service":"Rule Engine", "level":"info", "message":"Service started"})");
+	
+	std::cout << "Logged info" << std::endl;
+	
+	
+    // Initialize handler, connection, and channel	
     MyTcpHandler handler;
     AMQP::TcpConnection connection(&handler, AMQP::Address("amqp://guest:guest@rabbitmq/"));
     AMQP::TcpChannel channel(&connection);
