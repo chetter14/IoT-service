@@ -10,12 +10,10 @@
 #include "Prometheus.hpp"
 #include <prometheus/registry.h>
 #include <prometheus/counter.h>
+#include "Logger.hpp"
 #include <sstream>
 #include <iomanip>
 #include <ctime>
-
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/tcp_sink.h> // TCP sink for Logstash
 
 using namespace iot_service;
 
@@ -52,39 +50,9 @@ namespace {
 }
 
 int main() {
-		// Initialize Logger
-	// Logger::Initialize("logstash", 5000);
-	
-	// std::cout << "Sleeping..." << std::endl;
-	
-	// using namespace std::chrono_literals;
-	// std::this_thread::sleep_for(50s);
-	
-	std::cout << "Launched main()" << std::endl;
-	
-	// Configure the TCP sink for Logstash
-    spdlog::sinks::tcp_sink_config cfg("logstash", 5044);
-	// cfg.username = "logstash_user";
-    // cfg.password = "root";
-	
-	std::cout << "Created config" << std::endl;
-	
-	auto tcp_sink = std::make_shared<spdlog::sinks::tcp_sink_mt>(cfg);
-	
-	std::cout << "Created tcp sink" << std::endl;
-	
-	auto logger = std::make_shared<spdlog::logger>("tcp_logger", tcp_sink);
-	
-	std::cout << "Created logger" << std::endl;
-	
-	spdlog::register_logger(logger);
-	
-	std::cout << "Registered logger" << std::endl;
-
-	logger->info(R"({"service":"Rule Engine", "level":"info", "message":"Service started"})");
-	
-	std::cout << "Logged info" << std::endl;
-	
+	// Initialize Logger
+	Logger::Initialize("logstash", 5044);
+	Logger::Info(R"({"service":"Rule Engine", "level":"info", "message":"Service started"})");
 	
     // Initialize handler, connection, and channel	
     MyTcpHandler handler;
@@ -124,6 +92,9 @@ int main() {
 		std::string received_message(message.body(), message.bodySize());
 		int cur_temp = std::stoi(received_message);
 		
+		// Log reception of temperature
+		Logger::Info(R"({"service":"Rule Engine", "level":"info", "message":"Received a temperature"})");
+		
 		// Update messages counter value
 		message_counter.Increment();
 		
@@ -141,6 +112,10 @@ int main() {
 				bsoncxx::builder::basic::kvp("Time", bson_date)
 			));
 		}
+		
+		// Log recording of rule
+		Logger::Info(R"({"service":"Rule Engine", "level":"info", "message":"Recorded a rule"})");
+		
 		// Update the last and previous of the last values
 		prev_last_temp = last_temp;
 		last_temp = cur_temp;

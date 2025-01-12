@@ -9,13 +9,10 @@
 #include "Prometheus.hpp"
 #include <prometheus/registry.h>
 #include <prometheus/counter.h>
-// #include "Logger.hpp"
+#include "Logger.hpp"
 #include <sstream>
 #include <iomanip>
 #include <ctime>
-
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/tcp_sink.h> // TCP sink for Logstash
 
 using namespace iot_service;
 
@@ -43,37 +40,8 @@ namespace {
 
 int main() {
 	// Initialize Logger
-	// Logger::Initialize("logstash", 5000);
-	
-	// std::cout << "Sleeping..." << std::endl;
-	
-	// using namespace std::chrono_literals;
-	// std::this_thread::sleep_for(25s);
-	
-	std::cout << "Launched main()" << std::endl;
-	
-	// Configure the TCP sink for Logstash
-    spdlog::sinks::tcp_sink_config cfg("logstash", 5044);
-	// cfg.username = "logstash_user";
-    // cfg.password = "root";
-	
-	std::cout << "Created config" << std::endl;
-	
-	auto tcp_sink = std::make_shared<spdlog::sinks::tcp_sink_mt>(cfg);
-	
-	std::cout << "Created tcp sink" << std::endl;
-	
-	auto logger = std::make_shared<spdlog::logger>("tcp_logger", tcp_sink);
-	
-	std::cout << "Created logger" << std::endl;
-	
-	spdlog::register_logger(logger);
-	
-	std::cout << "Registered logger" << std::endl;
-
-	logger->info(R"({"service":"IoT Controller", "level":"info", "message":"Service started"})");
-	
-	std::cout << "Logged info" << std::endl;
+	Logger::Initialize("logstash", 5044);
+	Logger::Info(R"({"service":"IoT Controller", "level":"info", "message":"Service started"})");
 	
     // Initialize the handler, connection, and channel
     MyTcpHandler handler;
@@ -112,13 +80,11 @@ int main() {
 		std::string received_message(message.body(), message.bodySize());
 		int temperature = std::stoi(received_message);
 		
+		// Log reception of temperature
+		Logger::Info(R"({"service":"IoT Controller", "level":"info", "message":"Received a temperature"})");
+		
 		// Update message_counter value
 		message_counter.Increment();
-		
-		// Log temperature
-		// Logger::Info(R"({"service":"IoTController", "level":"info", "message":"Received a temperature"})");
-		
-
 		
 		// Get the current time
 		auto now = std::chrono::system_clock::now();
@@ -131,6 +97,9 @@ int main() {
 		));
 		
 		channel.publish(mqbroker::Exchange, mqbroker::REQueueRoutingKey, received_message);
+		
+		// Log sending of temperature
+		Logger::Info(R"({"service":"IoT Controller", "level":"info", "message":"Sent a temperature"})");
 	});
 	
 	while (true) {
