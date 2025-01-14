@@ -1,3 +1,6 @@
+#ifndef LOGGER_HPP
+#define LOGGER_HPP
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/tcp_sink.h> 	// TCP sink for Logstash
 #include <memory>
@@ -14,3 +17,5 @@ public:
 	static void Warn(const std::string& message);
 	static void Error(const std::string& message);
 };
+
+#endif	// LOGGER_HPP

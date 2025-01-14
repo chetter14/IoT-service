@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 				
 		// To send 10 messages per second
 		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(50ms);
+		std::this_thread::sleep_for(5ms);
 	}
 
 	std::cout << "The DataSimulator is to be closed!" << std::endl;

@@ -1,6 +1,11 @@
 #include "MyTcpHandler.hpp"
 #include <iostream>
 #include <thread>
+#include <vector>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 #include <chrono>
 #include <string>
 #include <bsoncxx/json.hpp>
@@ -37,11 +42,116 @@ namespace {
 	}
 }
 
+class ThreadPool {
+public:
+    ThreadPool() : stop_flag_(false) {
+		Logger::Info(R"({"service":"IoT Controller", "message":"Thread pool started"})");
+	}
+
+    ~ThreadPool() {
+        Stop();
+    }
+
+    void EnqueueMessage(const std::string& message) {
+        {
+            std::lock_guard<std::mutex> lock(queue_mutex_);
+            message_queue_.push(message);
+        }
+        queue_condition_.notify_one();
+		Logger::Info(R"({"service":"IoT Controller", "level":"info", "message":"Enqueued message"})");
+    }
+
+    void AdjustThreads(std::size_t desired_threads) {
+        std::lock_guard<std::mutex> lock(pool_mutex_);
+        std::size_t current_threads = workers_.size();
+
+        if (desired_threads > current_threads) {
+            for (std::size_t i = current_threads; i < desired_threads; ++i) {
+                workers_.emplace_back(&ThreadPool::WorkerThread, this);
+            }
+        } else if (desired_threads < current_threads) {
+            std::size_t threads_to_stop = current_threads - desired_threads;
+            for (std::size_t i = 0; i < threads_to_stop; ++i) {
+                EnqueueMessage("STOP_THREAD");
+            }
+        }
+    }
+
+    void Stop() {
+        AdjustThreads(0);
+        {
+            std::lock_guard<std::mutex> lock(queue_mutex_);
+            stop_flag_ = true;
+        }
+        queue_condition_.notify_all();
+        for (std::thread& worker : workers_) {
+            if (worker.joinable()) {
+                worker.join();
+            }
+        }
+        workers_.clear();
+    }
+	
+	void SetProcessMessageFunction(std::function<void(const std::string&)> process_message_functor) {
+		process_message_ = process_message_functor;
+	}
+
+private:
+    void WorkerThread() {
+        while (true) {
+            std::string message;
+            {
+                std::unique_lock<std::mutex> lock(queue_mutex_);
+                queue_condition_.wait(lock, [this] { return !message_queue_.empty() || stop_flag_; });
+
+                if (stop_flag_ && message_queue_.empty()) {
+                    return;
+                }
+
+                message = message_queue_.front();
+                message_queue_.pop();
+            }
+
+            if (message == "STOP_THREAD") {
+                return;
+            }
+
+            process_message_(message);
+        }
+    }
+
+    std::vector<std::thread> workers_;
+    std::queue<std::string> message_queue_;
+    std::mutex queue_mutex_;
+    std::condition_variable queue_condition_;
+    std::mutex pool_mutex_;
+    std::atomic<bool> stop_flag_;
+	
+	std::function<void(const std::string&)> process_message_;
+};
+
+void MonitorMessageRateAndAdjustThreads(ThreadPool& thread_pool, AMQP::TcpChannel& channel) {
+    const std::size_t messages_per_thread = 100; // Target messages per thread per second
+    const std::size_t min_threads = 1;          // Minimum threads to keep alive
+
+    while (true) {
+        double rate = FetchMessageRate("http://prometheus:9090", "rate(iot_controller_counter[1s])");
+		std::size_t required_threads = std::max(1, static_cast<int>(std::ceil(rate / 100.0)));
+		
+		Logger::Info(std::format("\"service\":\"IoT Controller\", \"message\":\"Required threads - {}\"", required_threads));
+
+        // Adjust thread pool size
+        thread_pool.AdjustThreads(required_threads);
+    }
+}
 
 int main() {
 	// Initialize Logger
 	Logger::Initialize("logstash", 5044);
 	Logger::Info(R"({"service":"IoT Controller", "level":"info", "message":"Service started"})");
+	
+	// Initialize thread pool
+	ThreadPool thread_pool;
 	
     // Initialize the handler, connection, and channel
     MyTcpHandler handler;
@@ -71,14 +181,14 @@ int main() {
                            .Register(*registry);
 	auto& message_counter = counter_family.Add({{"message_counter", "value"}});
 
-    // Declare the queue with DataSimulator to consume messages from it
-    channel.declareQueue(mqbroker::DataSimulatorQueue);	
-	channel.consume(mqbroker::DataSimulatorQueue).onReceived([&](const AMQP::Message &message,
-                                              uint64_t deliveryTag,
-                                              bool redelivered) {
-		// Extract the message body (temperature value)
-		std::string received_message(message.body(), message.bodySize());
-		int temperature = std::stoi(received_message);
+	// Launch monitoring thread (to adjust worker threads)
+	using namespace std::chrono_literals;
+	std::this_thread::sleep_for(5s);	// Wait for Prometheus to start
+	std::thread monitor_thread(MonitorMessageRateAndAdjustThreads, std::ref(thread_pool), std::ref(channel));
+
+	// Set function to process messages
+	thread_pool.SetProcessMessageFunction([&message_counter, &temp_values_collection, &channel](const std::string& message) {
+		int temperature = std::stoi(message);
 		
 		// Log reception of temperature
 		Logger::Info(R"({"service":"IoT Controller", "level":"info", "message":"Received a temperature"})");
@@ -96,182 +206,27 @@ int main() {
 			bsoncxx::builder::basic::kvp("Time", bson_date)
 		));
 		
-		channel.publish(mqbroker::Exchange, mqbroker::REQueueRoutingKey, received_message);
+		channel.publish(mqbroker::Exchange, mqbroker::REQueueRoutingKey, message);
 		
 		// Log sending of temperature
 		Logger::Info(R"({"service":"IoT Controller", "level":"info", "message":"Sent a temperature"})");
+	});
+
+    // Declare the queue with DataSimulator to consume messages from it
+    channel.declareQueue(mqbroker::DataSimulatorQueue);	
+	channel.consume(mqbroker::DataSimulatorQueue).onReceived([&](const AMQP::Message &message,
+                                              uint64_t deliveryTag,
+                                              bool redelivered) {
+		// Extract the message body (temperature value)
+		std::string received_message(message.body(), message.bodySize());
+		thread_pool.EnqueueMessage(received_message);
 	});
 	
 	while (true) {
 		handler.processEvents(&connection);
 	}
 	
+	monitor_thread.join();
 	std::cout << "IoT controller is to be closed!" << std::endl;
     return 0;
 }
-
-
-/*
-Yes, it is possible to fetch performance data from Prometheus in your C++ code. Prometheus provides an **HTTP API** that allows you to query its data programmatically. You can use this API to fetch metrics and use them for decision-making, such as dynamically creating new threads based on incoming request rates.
-
----
-
-### **Steps to Fetch Prometheus Data in C++**
-
-1. **Understand the Prometheus HTTP API**:
-   - The Prometheus HTTP API allows you to query metrics using the `/api/v1/query` endpoint.
-   - Example query URL:
-     ```
-     http://<PROMETHEUS_SERVER>:9090/api/v1/query?query=rate(example_counter[1m])
-     ```
-   - The response is in JSON format.
-
-2. **Use an HTTP Client Library in C++**:
-   - Libraries like **cURL**, **Boost.Beast**, or **cpprestsdk** can be used to make HTTP requests.
-
-3. **Parse JSON Responses**:
-   - Use a JSON parsing library, such as **nlohmann/json** or **RapidJSON**, to handle the Prometheus API response.
-
-4. **Integrate the Logic**:
-   - Fetch the request rate from Prometheus.
-   - Dynamically adjust the number of threads based on the rate.
-
----
-
-### **Example Code**
-
-Here’s an example of how you might fetch data from Prometheus and adjust threads:
-
-#### Prerequisites:
-- Install **libcurl** and **nlohmann/json** for HTTP requests and JSON parsing.
-
-#### Code:
-
-```cpp
-#include <iostream>
-#include <curl/curl.h>
-#include <nlohmann/json.hpp>
-#include <thread>
-#include <vector>
-
-using json = nlohmann::json;
-
-// Callback function to capture HTTP response
-size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* output) {
-    size_t totalSize = size * nmemb;
-    output->append((char*)contents, totalSize);
-    return totalSize;
-}
-
-// Fetch data from Prometheus
-double fetchPrometheusMetric(const std::string& query) {
-    CURL* curl;
-    CURLcode res;
-    std::string readBuffer;
-
-    std::string url = "http://localhost:9090/api/v1/query?query=" + query;
-
-    curl = curl_easy_init();
-    if(curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-    }
-
-    if (res != CURLE_OK) {
-        std::cerr << "cURL error: " << curl_easy_strerror(res) << std::endl;
-        return -1;
-    }
-
-    // Parse the JSON response
-    auto jsonResponse = json::parse(readBuffer);
-    if (jsonResponse["status"] == "success") {
-        double value = std::stod(jsonResponse["data"]["result"][0]["value"][1].get<std::string>());
-        return value;
-    }
-
-    std::cerr << "Error fetching metric: " << jsonResponse.dump() << std::endl;
-    return -1;
-}
-
-// Example: Dynamically adjust threads
-void manageThreads(double requestRate, std::vector<std::thread>& threads) {
-    int desiredThreads = static_cast<int>(requestRate * 10); // Example scaling logic
-    while (threads.size() < desiredThreads) {
-        threads.emplace_back([]() {
-            std::this_thread::sleep_for(std::chrono::seconds(1)); // Example task
-        });
-        std::cout << "New thread created. Total threads: " << threads.size() << std::endl;
-    }
-}
-
-int main() {
-    std::vector<std::thread> threads;
-
-    // Example query for incoming request rate
-    std::string query = "rate(requests_total[1m])";
-
-    while (true) {
-        double requestRate = fetchPrometheusMetric(query);
-        if (requestRate >= 0) {
-            std::cout << "Current request rate: " << requestRate << " requests/s" << std::endl;
-            manageThreads(requestRate, threads);
-        } else {
-            std::cerr << "Failed to fetch metrics" << std::endl;
-        }
-
-        // Cleanup finished threads
-        threads.erase(std::remove_if(threads.begin(), threads.end(),
-                                     [](std::thread& t) { return !t.joinable(); }),
-                      threads.end());
-
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-    }
-
-    for (auto& t : threads) {
-        if (t.joinable()) t.join();
-    }
-
-    return 0;
-}
-```
-
----
-
-### **Explanation**
-
-1. **Fetch Metrics**:
-   - The `fetchPrometheusMetric` function sends an HTTP GET request to the Prometheus `/api/v1/query` endpoint.
-   - It parses the JSON response to extract the metric value.
-
-2. **Adjust Threads**:
-   - The `manageThreads` function adjusts the number of threads based on the incoming request rate.
-
-3. **Thread Cleanup**:
-   - The code removes finished threads from the vector to avoid resource leakage.
-
----
-
-### **Key Considerations**
-
-1. **Rate Limiting**:
-   - Avoid querying Prometheus too frequently. Use a reasonable interval (e.g., every 10 seconds).
-
-2. **Error Handling**:
-   - Add robust error handling for network issues, invalid responses, and JSON parsing errors.
-
-3. **Optimization**:
-   - Make thread management efficient to prevent excessive creation and destruction of threads.
-
-4. **Secure Access**:
-   - If Prometheus requires authentication, include the necessary credentials in the HTTP request.
-
----
-
-Let me know if you have further questions or need help with implementation details!
-
-
-
-*/ 

@@ -8,7 +8,12 @@ RUN apt-get update && apt-get install -y \
 	libssl-dev \
 	libsasl2-dev \
 	libmicrohttpd-dev \
-    libcurl4-openssl-dev \
+	# For curl lib
+    libcurl4-openssl-dev \	
+	# For curl lib (optional for debugging)
+	curl \
+	# For nlohmann JSON library	
+	nlohmann-json3-dev \		
 	git \
 	&& rm -rf /var/lib/apt/lists/*
 	
@@ -53,8 +58,8 @@ COPY source/ /app
 RUN g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi \
 		-lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx DataSimulator.cpp -o DataSimulator && \
     g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi -I/usr/local/include/prometheus-cpp \ 
-		-lspdlog -lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core \
+		-lspdlog -lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core -lcurl \
 		IoTController.cpp Logger.cpp -o IoTController && \
     g++ -std=c++20 -I/usr/local/include -I/usr/local/include/mongocxx/v_noabi -I/usr/local/include/bsoncxx/v_noabi -I/usr/local/include/prometheus-cpp \
-		-lspdlog -lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core \
+		-lspdlog -lamqpcpp -lpthread -ldl -lmongocxx -lbsoncxx -lprometheus-cpp-pull -lprometheus-cpp-core -lcurl \
 		RuleEngine.cpp Logger.cpp -o RuleEngine
