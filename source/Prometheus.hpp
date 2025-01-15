@@ -72,16 +72,17 @@ double FetchMessageRate(const std::string& prometheus_url, const std::string& qu
     if (jsonResponse["status"] != "success") {
         throw std::runtime_error("Prometheus query failed: " + jsonResponse.dump());
     }
-
+	
     // Extract the value
     auto result = jsonResponse["data"]["result"];
     if (result.empty()) {
         // throw std::runtime_error("Prometheus; Fetching rate; No data returned for the query");
-        std::cout << "Prometheus; Fetching rate; No data returned for the query" << std::endl;
+        std::cout << "No data returned for the query" << std::endl;
 		return 0.0;
     }
 
     double rate = std::stod(result[0]["value"][1].get<std::string>());
+	std::cout << "Prometheus; Fetched rate - " << rate << std::endl;
     return rate;
 }
 

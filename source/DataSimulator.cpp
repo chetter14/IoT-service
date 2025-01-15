@@ -41,9 +41,9 @@ int main(int argc, char* argv[]) {
 		
 		handler.processEvents(&connection);
 				
-		// To send 10 messages per second
+		// To send 20 messages per second
 		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(5ms);
+		std::this_thread::sleep_for(50ms);
 	}
 
 	std::cout << "The DataSimulator is to be closed!" << std::endl;
